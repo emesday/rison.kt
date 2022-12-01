@@ -1,77 +1,64 @@
 package emesday.rison
 
-class Encoder {
+import kotlinx.serialization.json.*
+
+open class Rison {
 
     private var string: String = ""
 
     private var index: Int = 0
 
-    fun toJsonString(string: String, format: String = "string"): Sequence<Char> = sequence {
+    companion object Default : Rison()
+
+    fun decodeFromString(string: String, format: String = "string"): JsonElement {
         if (string == "(") {
             throw ParserException("unmatched '('")
         }
-
         when (format) {
-            "string" -> this@Encoder.string = string
-            "A" -> this@Encoder.string = "!($string)"
-            "O" -> this@Encoder.string = "($string)"
+            "string" -> this.string = string
+            "A" -> this.string = "!($string)"
+            "O" -> this.string = "($string)"
             else -> throw ParserException(
                 "Parse format should be one of string, A for list, O for object."
             )
         }
-
         index = 0
-
-        yieldAll(readValue())
-
+        val value = readValue()
         if (next() != null) {
             throw ParserException("unable to parse rison string $string")
         }
+        return value
     }
 
-    private fun readValue(): Sequence<Char> = sequence {
+    private fun readValue(): JsonElement {
         val c = next()
-        var done = true
 
         if (c == '!') {
-            yieldAll(parseBang())
+            return parseBang()
         } else if (c == '(') {
-            yield('{')
-            yieldAll(parseOpenParen())
-            yield('}')
+            return parseOpenParen()
         } else if (c == '\'') {
-            yield('"')
-            yieldAll(parseSingleQuote())
-            yield('"')
+            return parseSingleQuote()
         } else if (c != null && c in "-0123456789") {
-            yieldAll(parserNumber())
-        } else {
-            done = false
+            return parserNumber()
         }
 
-        if (!done) {
-            val s = string
-            val i = index - 1
-            val m = NEXT_ID_RE.matchAt(s, i)
-            if (m != null) {
-                val id = m.groupValues.first()
-                index = i + id.length
-                yield('"')
-                yieldAll(id.iterator())
-                yield('"')
-                done = true
-            }
+        val s = string
+        val i = index - 1
+        val m = NEXT_ID_RE.matchAt(s, i)
+        if (m != null) {
+            val id = m.groupValues.first()
+            index = i + id.length
+            return JsonPrimitive(id)
         }
 
-        if (!done) {
-            if (c != null) {
-                throw ParserException("invalid character: '$c'")
-            }
-            throw ParserException("empty expression")
+        if (c != null) {
+            throw ParserException("invalid character: '$c'")
         }
+        throw ParserException("empty expression")
     }
 
-    private fun parseArray(): Sequence<Char> = sequence {
+    private fun parseArray(): JsonElement = buildJsonArray {
         var count = 0
         var c: Char?
         while (true) {
@@ -88,18 +75,17 @@ class Encoder {
                 if (c != ',') {
                     throw ParserException("missing ','")
                 }
-                yield(',')
             } else if (c == ',') {
                 throw ParserException("extra ','")
             } else {
                 index -= 1
             }
-            yieldAll(readValue())
+            add(readValue())
             count += 1
         }
     }
 
-    private fun parseBang(): Sequence<Char> = sequence {
+    private fun parseBang(): JsonElement {
         val s = string
         val c = s.getOrNull(index)
         index += 1
@@ -107,21 +93,17 @@ class Encoder {
             throw ParserException("\"!\" at end of input")
         }
 
-        when (c) {
-            't' -> yieldAll("true".iterator())
-            'f' -> yieldAll("false".iterator())
-            'n' -> yieldAll("null".iterator())
-            '(' -> {
-                yield('[')
-                yieldAll(parseArray())
-                yield(']')
-            }
+        return when (c) {
+            't' -> JsonPrimitive(true)
+            'f' -> JsonPrimitive(false)
+            'n' -> JsonNull
+            '(' -> parseArray()
             else ->
                 throw ParserException("unknown literal: !'$c'")
         }
     }
 
-    private fun parseOpenParen(): Sequence<Char> = sequence {
+    private fun parseOpenParen(): JsonElement = buildJsonObject {
         var count = 0
         while (true) {
             val c = next()
@@ -132,26 +114,26 @@ class Encoder {
                 if (c != ',') {
                     throw ParserException("missing ','")
                 }
-                yield(',')
             } else if (c == ',') {
                 throw ParserException("extra ','")
             } else {
                 index -= 1
             }
-            yieldAll(readValue())
+            val key = readValue()
             if (next() != ':') {
                 throw ParserException("missing ':'")
             }
-            yield(':')
-            yieldAll(readValue())
+            val value = readValue()
+            put(key.jsonPrimitive.content, value)
             count += 1
         }
     }
 
-    private fun parseSingleQuote(): Sequence<Char> = sequence {
+    private fun parseSingleQuote(): JsonElement {
         val s = string
         var i = index
         var start = i
+        val segments = mutableListOf<String>()
         var c: Char
 
         while (true) {
@@ -166,12 +148,12 @@ class Encoder {
 
             if (c == '!') {
                 if (start < i - 1) {
-                    yieldAll(s.subSequence(start until i - 1).iterator())
+                    segments.add(s.slice(start until i - 1))
                 }
                 c = s[i]
                 i += 1
                 if (c in "!'") {
-                    yield(c)
+                    segments.add(c.toString())
                 } else {
                     throw ParserException("invalid string escape: \"!$c\"")
                 }
@@ -181,12 +163,13 @@ class Encoder {
         }
 
         if (start < i - 1) {
-            yieldAll(s.subSequence(start until i - 1).iterator())
+            segments.add(s.slice(start until i - 1))
         }
         index = i
+        return JsonPrimitive(segments.joinToString(""))
     }
 
-    private fun parserNumber(): Sequence<Char> = sequence {
+    private fun parserNumber(): JsonElement {
         var s = string
         var i = index
         val start = i - 1
@@ -229,11 +212,9 @@ class Encoder {
             throw ParserException("invalid number")
         }
         if (Regex("[.e]").find(s) != null) {
-            s = Regex("e(\\d)").replace(s, "e+$1")
-            yieldAll(s.iterator())
-        } else {
-            yieldAll(s.iterator())
+            return JsonPrimitive(s.toDouble())
         }
+        return JsonPrimitive(s.toLong())
     }
 
     fun next(): Char? {
@@ -253,7 +234,3 @@ class Encoder {
         return c
     }
 }
-
-fun String.risonToJsonCharSequence(): Sequence<Char> = Encoder().toJsonString(this)
-
-fun String.risonToJsonString(): String = risonToJsonCharSequence().joinToString("")
