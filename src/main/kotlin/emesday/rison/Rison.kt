@@ -233,4 +233,31 @@ open class Rison {
         index = i
         return c
     }
+
+    fun encodeToString(element: JsonElement): String {
+        return when (element) {
+            is JsonArray -> encode(element)
+            is JsonObject -> encode(element)
+            is JsonPrimitive -> encode(element)
+            is JsonNull -> encode(element)
+        }
+    }
+
+    private fun encode(array: JsonArray): String {
+        TODO()
+    }
+
+    private fun encode(primitive: JsonPrimitive): String {
+        if (primitive.isString) {
+        }
+        TODO()
+    }
+
+    private fun encode(nil: JsonNull): String {
+        return "!n"
+    }
+
+    private fun encode(obj: JsonObject): String {
+        TODO()
+    }
 }
