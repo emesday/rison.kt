@@ -60,7 +60,7 @@ class RisonTest {
     fun decode() {
         for ((rison, json) in objectOrArrayPairs) {
             val expected = Json.decodeFromString<JsonElement>(json)
-            val actual = Rison.decodeFromString(rison)
+            val actual = Rison.decodeFromString<JsonElement>(rison)
             assertEquals(expected, actual)
         }
 
@@ -72,12 +72,12 @@ class RisonTest {
                 null -> JsonNull
                 else -> throw Error()
             }
-            val actual = Rison.decodeFromString(rison)
+            val actual = Rison.decodeFromString<JsonPrimitive>(rison)
             assertEquals(expected, actual)
         }
 
         for (rison in exceptions) {
-            assertThrows<ParserException> { Rison.decodeFromString(rison) }
+            assertThrows<RisonException> { Rison.decodeFromString(rison) }
         }
     }
 
@@ -88,7 +88,7 @@ class RisonTest {
         val element = Json.encodeToJsonElement(data)
         val jsonString1 = Json.encodeToString(element)
         val jsonString2 = Json.encodeToString(data)
-        // val risonString = Rison.encodeToString(element)
+        val risonString = Rison.encodeToString(element)
 
         println(element)
         println(jsonString1)
