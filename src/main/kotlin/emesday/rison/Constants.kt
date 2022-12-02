@@ -1,5 +1,7 @@
 package emesday.rison
 
+import kotlinx.serialization.json.*
+
 const val WHITESPACE = ""
 
 const val IDCHAR_PUNCTUATION = "_-./~%+"
@@ -22,3 +24,7 @@ val ID_OK_RE = Regex("^$IDRX\$", RegexOption.MULTILINE)
 
 // Regexp to find the end of an id when parsing.
 val NEXT_ID_RE = Regex(IDRX, RegexOption.MULTILINE)
+
+val JsonTrue = JsonPrimitive(true)
+
+val JsonFalse = JsonPrimitive(false)

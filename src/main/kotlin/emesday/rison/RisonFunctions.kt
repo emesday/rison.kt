@@ -232,30 +232,85 @@ class RisonFunctions {
         return c
     }
 
-    fun encodeToString(element: JsonElement): String {
-        return when (element) {
-            is JsonArray -> encode(element)
-            is JsonObject -> encode(element)
-            is JsonPrimitive -> encode(element)
-            is JsonNull -> encode(element)
+    fun encodeToString(element: JsonElement): String =
+        StringBuilder().encode(element).toString()
+
+    private fun StringBuilder.encode(
+        element: JsonElement
+    ): StringBuilder = when (element) {
+        is JsonArray -> encode(element)
+        is JsonObject -> encode(element)
+        is JsonPrimitive -> encode(element)
+    }
+
+    private fun StringBuilder.encode(
+        array: JsonArray
+    ): StringBuilder {
+        var count = 0
+        append("!(")
+        for (item in array) {
+            if (count > 0) {
+                append(",")
+            }
+            encode(item)
+            count += 1
+        }
+        append(")")
+        return this
+    }
+
+    private fun StringBuilder.encodeString(content: String): StringBuilder {
+        return if (content == "") {
+            append("''")
+        } else if (ID_OK_RE.matches(content)) {
+            append(content)
+        } else {
+            val v = Regex("(['!])").replace(content) {
+                val first = it.groupValues.first()
+                if (first in setOf("'", "!")) {
+                    "!$first"
+                } else {
+                    first
+                }
+            }
+            append("'${v}'")
         }
     }
 
-    private fun encode(array: JsonArray): String {
-        TODO()
-    }
-
-    private fun encode(primitive: JsonPrimitive): String {
-        if (primitive.isString) {
+    private fun StringBuilder.encode(primitive: JsonPrimitive): StringBuilder {
+        val content = primitive.content
+        return when {
+            primitive == JsonTrue -> {
+                append("!t")
+            }
+            primitive == JsonFalse -> {
+                append("!f")
+            }
+            primitive == JsonNull -> {
+                append("!n")
+            }
+            primitive.isString -> {
+                encodeString(content)
+            }
+            else -> { // number
+                append(content.lowercase().replace("+", ""))
+            }
         }
-        TODO()
     }
 
-    private fun encode(nil: JsonNull): String {
-        return "!n"
-    }
-
-    private fun encode(obj: JsonObject): String {
-        TODO()
+    private fun StringBuilder.encode(obj: JsonObject): StringBuilder {
+        var count = 0
+        append("(")
+        for ((k, v) in obj.toSortedMap()) {
+            if (count > 0) {
+                append(",")
+            }
+            encodeString(k)
+            append(":")
+            encode(v)
+            count += 1
+        }
+        append(")")
+        return this
     }
 }
